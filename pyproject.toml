@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs501r-benchmarks"
+version = "0.1.0"
+description = "Benchmark runner and asset preparation scripts for the CS501R final project."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "datasets",
+  "huggingface_hub",
+  "numpy",
+  "pandas",
+  "requests",
+  "torch",
+  "tqdm",
+  "transformers",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
