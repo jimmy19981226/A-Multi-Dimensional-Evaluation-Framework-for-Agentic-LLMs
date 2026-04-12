@@ -1,12 +1,11 @@
-# CS501R Final Project
+# LLM Reliability Benchmarks
 
-This folder is a GitHub-ready version of the project for code review and sharing.
-It removes environment-specific batch files and keeps the code in a cleaner
-`src/` + `scripts/` layout.
+An evaluation toolkit for comparing language models across multi-turn reliability,
+tool use, safety behavior, and final-task fidelity benchmarks.
 
 ## Repository Layout
 
-- `src/cs501r_benchmarks/`: benchmark runner and asset preparation modules
+- `src/llm_reliability_benchmarks/`: benchmark runner and asset preparation modules
 - `scripts/prepare_assets.py`: convenience entry point for downloading assets
 - `scripts/run_experiments.py`: convenience entry point for running experiments
 - `data/raw/`: raw benchmark files downloaded by the asset script
@@ -39,4 +38,4 @@ python scripts/run_experiments.py --experiments harmbench fidelity
 
 - Models are expected under `models/` by default.
 - Large model weights, logs, and generated results are intentionally excluded from Git.
-- The original working project remains outside this folder.
+- This repository is structured for sharing, review, and portfolio use.

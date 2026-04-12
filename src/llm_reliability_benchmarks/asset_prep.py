@@ -33,7 +33,7 @@ HARMBENCH_URL = (
     "behavior_datasets/harmbench_behaviors_text_all.csv"
 )
 WIKIPEDIA_HEADERS = {
-    "User-Agent": "CS501R-Final-Project/1.0 (benchmark asset preparation)"
+    "User-Agent": "LLM-Reliability-Benchmarks/1.0 (benchmark asset preparation)"
 }
 
 

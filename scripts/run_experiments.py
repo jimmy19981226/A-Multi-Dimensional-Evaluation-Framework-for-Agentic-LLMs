@@ -8,7 +8,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from cs501r_benchmarks.benchmark_runner import main
+from llm_reliability_benchmarks.benchmark_runner import main
 
 
 if __name__ == "__main__":

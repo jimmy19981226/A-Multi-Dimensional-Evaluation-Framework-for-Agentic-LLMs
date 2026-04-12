@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cs501r-benchmarks"
+name = "llm-reliability-benchmarks"
 version = "0.1.0"
-description = "Benchmark runner and asset preparation scripts for the CS501R final project."
+description = "Benchmark runner and asset preparation scripts for evaluating LLM reliability."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

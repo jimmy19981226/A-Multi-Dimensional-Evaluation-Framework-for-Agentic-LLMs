@@ -89,7 +89,7 @@ def print_summary_rows(rows: list[dict[str, Any]], ordered_keys: list[str]) -> N
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the CS501R experiments from local models and local dataset files."
+        description="Run benchmark experiments from local models and local dataset files."
     )
     parser.add_argument(
         "--experiments",
@@ -1336,7 +1336,7 @@ def main() -> None:
     experiments = normalize_experiments(args.experiments)
     validate_local_assets(args, experiments)
     ensure_output_dir(args.output_dir)
-    print_section("CS501R Benchmark Runner")
+    print_section("LLM Reliability Benchmark Runner")
     print(f"Experiments: {', '.join(experiments)}")
     print(f"Output directory: {args.output_dir.resolve()}")
     print(f"Seed: {args.seed}")
