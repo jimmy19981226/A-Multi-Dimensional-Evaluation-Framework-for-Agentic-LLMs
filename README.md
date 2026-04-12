@@ -1,4 +1,4 @@
-# LLM Reliability Benchmarks
+# A Multi-Dimensional Evaluation Framework for Agentic LLMs
 
 An evaluation toolkit for comparing language models across multi-turn reliability,
 tool use, safety behavior, and final-task fidelity benchmarks.
