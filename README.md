@@ -37,7 +37,7 @@ ToolBench evaluates **proposed plans**. IFEval uses **judge-based constraint ass
 ## System design
 
 ```mermaid
-flowchart LR
+flowchart TB
     A[Hugging Face datasets and weights] --> B[Asset preparation]
     W[Wikipedia evidence] --> B
     B --> C[Local models and prompt files]
