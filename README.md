@@ -11,7 +11,7 @@ A local evaluation framework comparing base and instruction-tuned language model
 ![Inference](https://img.shields.io/badge/Inference-local-4169E1)
 ![Status](https://img.shields.io/badge/Status-research%20implementation-8759C7)
 
-[Evaluation design](#evaluation-design) · [Get started](#get-started) · [Methodology](docs/METHODOLOGY.md) · [Tests](#testing)
+[Reported results](#reported-results) · [Evaluation design](#evaluation-design) · [Get started](#get-started) · [Methodology](docs/METHODOLOGY.md) · [Tests](#testing)
 
 </div>
 
@@ -21,7 +21,19 @@ Aggregate scores can hide different failure modes. This project evaluates a mode
 
 The default comparison is **Qwen2.5-7B vs. Qwen2.5-7B-Instruct**, with **Qwen2.5-72B-Instruct** as a local judge. It combines Hugging Face asset preparation, GPU inference, structured grading, and JSON/CSV reporting in one workflow.
 
-**Project status:** Research implementation with CPU regression tests. Full model evaluations require substantial GPU resources; measured benchmark results are not checked into this repository. The grading protocols are custom adaptations of the source datasets. See [methodology and limitations](docs/METHODOLOGY.md) before interpreting scores.
+**Project status:** Research implementation with CPU regression tests and presentation-reported study results. Independent reproduction of the reported scores is pending. The grading protocols are custom adaptations of the source datasets; see [methodology and limitations](docs/METHODOLOGY.md) before interpreting scores.
+
+## Reported results
+
+The [project presentation](https://docs.google.com/presentation/d/1B00Q8jXUIvWZ7Mg9VsgoWkEiKJGwWQisxZBPMSesvBU/edit#slide=id.g3d5a3825d36_0_2537) reports a subset comparison in which the instruct model improves multi-turn scores, safety, and instruction following, while FRAMES shows a tradeoff between completion and groundedness.
+
+**Evidence status: presentation-reported, not independently reproduced.** Original per-example outputs and sample counts are unavailable. These values are not results of a new run of the current code.
+
+![Reported subset results for the base and instruct models, with separate score and percentage panels](docs/figures/presentation-reported-results.svg)
+
+The reported IFEval constraint rate increases from **52.0% to 91.2%**, while FRAMES task completion decreases from **36% to 31%** and groundedness increases from **3.08 to 3.40**. This supports a nuanced comparison rather than a single overall ranking.
+
+ToolBench decomposition is omitted from the chart because its scale is **1–5 in the slide but 0–3 in the current rubric**. The [full results and consistency audit](docs/RESULTS.md) preserve all eight reported values, document this discrepancy, and provide commands for a new GPU evaluation. [Source data](docs/evidence/presentation-reported-results.json) and the [plot script](scripts/plot_reported_results.py) make the figure reproducible without implying that model inference was repeated.
 
 ## Evaluation design
 
@@ -127,7 +139,7 @@ python scripts/prepare_assets.py --help
 python scripts/run_experiments.py --help
 ```
 
-CI checks the CPU tests and CLI entry points without downloading model weights or executing harmful-behavior prompts. Full GPU inference is a separate validation step.
+CI checks the CPU tests and CLI entry points without downloading model weights or executing harmful-behavior prompts. Reporting integration tests exercise all four experiment blocks with synthetic evaluator outputs, including score means, percentage conversion, JSON/CSV output, and credential exclusion from manifests. Full GPU inference is a separate validation step; passing these tests does not verify the presentation's model scores.
 
 ## Research boundaries
 

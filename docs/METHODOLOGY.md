@@ -38,7 +38,7 @@ An error stops the run. Completed experiment files remain available; the framewo
 5. Repeat with multiple seeds and larger samples before drawing conclusions; report uncertainty rather than only a mean.
 6. Label results as this framework's custom protocol and disclose the judge, quantization, sample size, and prompt formatting.
 
-The repository currently provides an implementation and regression tests. It does not bundle a measured comparison or claim superiority of either model.
+The repository includes [presentation-reported study results](RESULTS.md), clearly separated from newly reproduced results. Original per-example outputs and run settings are unavailable, and the decomposition scale differs between the presentation and the current rubric. The reported aggregates do not establish statistical significance or general superiority of either model.
 
 ## Contributing
 

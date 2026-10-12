@@ -1,0 +1,43 @@
+{
+  "reviewed_on": "2026-10-12",
+  "evaluated_code_commit": "e41afce426a84533d02e2fa37f683df19a68774d",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "python": "3.13.3",
+  "torch": "2.11.0",
+  "ram_gib": 16.0,
+  "cuda_available": false,
+  "mps_available": false,
+  "cpu_regression_tests": {
+    "passed": 33,
+    "command": "python -m pytest -q",
+    "uses_synthetic_evaluator_outputs": true
+  },
+  "inference_attempt": {
+    "command": [
+      "python",
+      "scripts/run_experiments.py",
+      "--experiments",
+      "all",
+      "--multiturn-sample-size",
+      "1",
+      "--toolbench-sample-size",
+      "1",
+      "--harmbench-sample-size",
+      "1",
+      "--ifeval-sample-size",
+      "1",
+      "--frames-sample-size",
+      "1",
+      "--output-dir",
+      "results/verification_attempt"
+    ],
+    "exit_code": 1,
+    "first_blocker": "Missing base model directory: models/Qwen2.5-7B",
+    "all_required_model_directories_present": false,
+    "all_required_evaluation_datasets_present": false,
+    "completed_model_inference": false,
+    "new_benchmark_scores_produced": false
+  },
+  "original_study_artifacts_available": false,
+  "historical_scores_independently_reproduced": false
+}
