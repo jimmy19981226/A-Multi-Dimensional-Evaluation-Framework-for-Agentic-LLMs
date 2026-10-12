@@ -11,6 +11,8 @@ import requests
 from datasets import load_dataset
 from huggingface_hub import login, snapshot_download
 
+from .validation import positive_int
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -56,16 +58,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--models-dir", type=Path, default=MODELS_DIR)
     parser.add_argument("--raw-data-dir", type=Path, default=RAW_DATA_DIR)
     parser.add_argument("--processed-data-dir", type=Path, default=PROCESSED_DATA_DIR)
-    parser.add_argument("--toolbench-sample-size", type=int, default=20)
+    parser.add_argument("--toolbench-sample-size", type=positive_int, default=20)
     parser.add_argument(
         "--max-workers",
-        type=int,
+        type=positive_int,
         default=2,
         help="Number of concurrent file downloads for Hugging Face snapshots.",
     )
     parser.add_argument(
         "--hf-timeout",
-        type=int,
+        type=positive_int,
         default=600,
         help="Timeout in seconds for Hugging Face download operations.",
     )
@@ -76,8 +78,8 @@ def parse_args() -> argparse.Namespace:
         default=["all"],
         help="Choose which assets to download.",
     )
-    parser.add_argument("--ifeval-sample-size", type=int, default=100)
-    parser.add_argument("--frames-sample-size", type=int, default=100)
+    parser.add_argument("--ifeval-sample-size", type=positive_int, default=100)
+    parser.add_argument("--frames-sample-size", type=positive_int, default=100)
     return parser.parse_args()
 
 
@@ -130,19 +132,22 @@ def build_toolbench_prompts(destination: Path, sample_size: int) -> None:
     print_section("Preparing ToolBench prompts")
     dataset = load_dataset("tuandunghcmut/toolbench-v1", "benchmark", split="g3_instruction")
     prompts = []
-    for index in range(sample_size):
+    for index in range(min(sample_size, len(dataset))):
         item = dataset[index]
         raw_relevant_apis = item.get("relevant_apis", "[]")
         try:
-            api_list_parsed = json.loads(raw_relevant_apis)
+            api_list_parsed = (json.loads(raw_relevant_apis)
+                               if isinstance(raw_relevant_apis, str) else raw_relevant_apis)
+            if not isinstance(api_list_parsed, list):
+                raise ValueError("relevant_apis must be a list")
             golden_steps = []
             for step_num, api_pair in enumerate(api_list_parsed, start=1):
-                if len(api_pair) == 2:
+                if isinstance(api_pair, (list, tuple)) and len(api_pair) == 2:
                     golden_steps.append(
                         f"Step {step_num}: Call {api_pair[1]} from {api_pair[0]}"
                     )
             real_golden_path = "\n".join(golden_steps)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             real_golden_path = "No required tools specified."
         prompts.append(
             {

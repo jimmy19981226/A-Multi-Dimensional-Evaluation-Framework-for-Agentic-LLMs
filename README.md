@@ -1,167 +1,138 @@
-# A Multi-Dimensional Evaluation Framework for Agentic LLMs
+<div align="center">
 
-A reproducible benchmark suite for measuring how **instruction tuning** changes the
-behavior of a language model across the capabilities that matter for agentic use:
-multi-turn reliability, tool-use planning, safety, and final-task fidelity.
+# Agentic LLM Reliability Benchmarks
 
-The framework runs everything **locally** — models, datasets, and an LLM-as-a-judge —
-so results are deterministic, offline, and free of third-party API costs. The default
-configuration performs a head-to-head comparison of **Qwen2.5-7B (base)** against
-**Qwen2.5-7B-Instruct**, graded by **Qwen2.5-72B-Instruct** loaded in 4-bit.
+**Where does instruction tuning help—and where do reliability gaps remain?**
 
----
+A local evaluation framework comparing base and instruction-tuned language models across conversation, planning, safety, and task fidelity.
 
-## Why this exists
+[![CI](https://github.com/jimmy19981226/A-Multi-Dimensional-Evaluation-Framework-for-Agentic-LLMs/actions/workflows/ci.yml/badge.svg)](https://github.com/jimmy19981226/A-Multi-Dimensional-Evaluation-Framework-for-Agentic-LLMs/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Inference](https://img.shields.io/badge/Inference-local-4169E1)
+![Status](https://img.shields.io/badge/Status-research%20implementation-8759C7)
 
-Aggregate leaderboard scores hide *where* a model actually improves. Instruction
-tuning might boost single-turn benchmarks while degrading multi-turn focus, or improve
-safety at the cost of over-verbosity. This project decomposes "reliability" into four
-independently-measured dimensions and reports a per-dimension scorecard for each model,
-making the trade-offs of fine-tuning visible.
+[Evaluation design](#evaluation-design) · [Get started](#get-started) · [Methodology](docs/METHODOLOGY.md) · [Tests](#testing)
 
-## Evaluation dimensions
+</div>
 
-| # | Experiment | Dataset | What it measures | Reported metrics |
-|---|------------|---------|------------------|------------------|
-| 1 | **Multi-turn Persistence** | [Lost-in-Conversation](https://huggingface.co/datasets/microsoft/lost_in_conversation) | Focus and task retention as a request is revealed across turns | G-Eval score (1–5), avg. verbosity |
-| 2 | **Planning & Decomposition** | [ToolBench](https://huggingface.co/datasets/tuandunghcmut/toolbench-v1) | Quality of a tool-call plan vs. a golden path | Decomposition, Efficiency, Rationality |
-| 3 | **Safety & Boundary Adherence** | [HarmBench](https://github.com/centerforaisafety/HarmBench) | Refusal of harmful behaviors | Safe rate, Attack Success Rate (ASR) |
-| 4 | **Final-Task Fidelity** | [IFEval](https://huggingface.co/datasets/google/IFEval) + [FRAMES](https://huggingface.co/datasets/google/frames-benchmark) | Instruction-following + grounded, evidence-based answering | Constraint satisfaction, over-verbosity, task completion, groundedness (1–5) |
+## Overview
 
-All grading is performed by a single, consistent judge model (G-Eval style) rather than
-brittle string matching, so open-ended responses are scored on intent and correctness.
+Aggregate scores can hide different failure modes. This project evaluates a model pair with separate rubrics for staying on task, planning tool calls, respecting safety boundaries, and following instructions with supporting evidence.
 
-## Architecture
+The default comparison is **Qwen2.5-7B vs. Qwen2.5-7B-Instruct**, with **Qwen2.5-72B-Instruct** as a local judge. It combines Hugging Face asset preparation, GPU inference, structured grading, and JSON/CSV reporting in one workflow.
 
-```
-prepare_assets.py  ──►  models/ + data/{raw,processed}/   (download & preprocess once)
-                                   │
-run_experiments.py ──►  load local model ─► generate ─► judge model grades ─► results/
-```
+**Project status:** Research implementation with CPU regression tests. Full model evaluations require substantial GPU resources; measured benchmark results are not checked into this repository. The grading protocols are custom adaptations of the source datasets. See [methodology and limitations](docs/METHODOLOGY.md) before interpreting scores.
 
-- **`src/llm_reliability_benchmarks/asset_prep.py`** — downloads model weights (Qwen2.5
-  base, instruct, judge) and benchmark datasets, fetches Wikipedia evidence for FRAMES,
-  and writes preprocessed prompt files. Downloads are resumable.
-- **`src/llm_reliability_benchmarks/benchmark_runner.py`** — loads models one at a time,
-  runs each selected experiment, grades outputs with the judge model, and writes per-run
-  JSON detail files plus JSON/CSV summaries. Models are evicted and GPU memory is cleared
-  between stages to keep peak VRAM manageable.
+## Evaluation design
 
-## Repository layout
+| Dimension | Source data | Question | Outputs |
+| :--- | :--- | :--- | :--- |
+| **Conversation** | Lost-in-Conversation | Does the model retain the task as information arrives over multiple turns? | Judge score, response length, transcripts |
+| **Planning** | ToolBench | Does its proposed tool sequence cover the required work efficiently? | Decomposition, efficiency, rationality |
+| **Safety** | HarmBench | Does the response exhibit the supplied harmful behavior? | Safe rate, attack success rate, judge verdict |
+| **Task fidelity** | IFEval + FRAMES | Does it satisfy constraints and answer using supplied evidence? | Constraint satisfaction, completion, groundedness |
 
-```
-.
-├── pyproject.toml                       # package metadata & dependencies
-├── scripts/
-│   ├── prepare_assets.py                # entry point: download & preprocess assets
-│   └── run_experiments.py               # entry point: run benchmarks
-├── src/llm_reliability_benchmarks/
-│   ├── asset_prep.py                    # asset download / preprocessing logic
-│   └── benchmark_runner.py              # experiment + judging logic
-├── data/
-│   ├── raw/                             # downloaded source datasets
-│   └── processed/                       # preprocessed prompt files
-├── models/                              # local model weights (gitignored)
-└── results/                            # generated JSON + CSV outputs (gitignored)
+ToolBench evaluates **proposed plans**. IFEval uses **judge-based constraint assessment**. These results should be reported under this framework's protocol rather than as official benchmark scores.
+
+## System design
+
+```mermaid
+flowchart LR
+    A[Hugging Face datasets and weights] --> B[Asset preparation]
+    W[Wikipedia evidence] --> B
+    B --> C[Local models and prompt files]
+    C --> D[Base or instruct model]
+    D --> E[Local judge]
+    E --> F[Validate verdicts and score ranges]
+    F --> G[JSON details and CSV summaries]
+    C --> H[Run manifest and dataset hashes]
 ```
 
-## Requirements
+- **Explicit evaluation boundaries.** Asset downloads happen during preparation. Model loading uses local files during evaluation.
+- **Auditable configuration.** Each run records its arguments, seed, package versions, and dataset SHA-256 hashes in `run_manifest.json`; credentials are excluded.
+- **Strict judge validation.** Missing verdicts, malformed JSON, and scores outside the rubric raise errors instead of silently becoming benchmark scores.
+- **Model-aware prompting.** Multi-turn evaluation uses an instruct model's chat template or a labeled conversation fallback for a base tokenizer without one.
+- **Controlled memory lifecycle.** The judge stays loaded while the base and instruct models are evaluated in sequence; GPU allocations are cleared between those stages.
 
-- Python **3.10+**
-- An NVIDIA GPU with CUDA. The 72B judge runs in 4-bit (`bitsandbytes`), but you still
-  need substantial VRAM to host the judge alongside a 7B model under test.
-- A [Hugging Face](https://huggingface.co) account/token if any gated assets are used
-  (public downloads work without one).
+## Get started
 
-Dependencies (`datasets`, `transformers`, `torch`, `huggingface_hub`, `bitsandbytes`,
-`numpy`, `pandas`, `tqdm`, `requests`) are declared in `pyproject.toml`.
+### 1. Install
 
-## Installation
+Use **Python 3.10+**. Full inference is intended for a CUDA environment with sufficient memory for a 4-bit 72B judge **plus** the active 7B model and runtime overhead. A standard laptop or small GPU is enough to inspect code and run the CPU tests, but not the default full evaluation.
 
 ```bash
 git clone https://github.com/jimmy19981226/A-Multi-Dimensional-Evaluation-Framework-for-Agentic-LLMs.git
 cd A-Multi-Dimensional-Evaluation-Framework-for-Agentic-LLMs
-python -m pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[gpu,dev]'
 ```
 
-## Quick start
+Install the PyTorch build appropriate for your CUDA environment using the [official installer](https://pytorch.org/get-started/locally/). On Windows, activate with `.venv\Scripts\Activate.ps1`.
 
-**1. Download and preprocess all assets** (models + datasets). This is a large,
-one-time download and is safe to re-run to resume:
+### 2. Prepare assets
 
 ```bash
+# Large downloads: base model, instruct model, judge, and all datasets.
 python scripts/prepare_assets.py --assets all
-# optionally authenticate for gated/rate-limited downloads:
-python scripts/prepare_assets.py --assets all --hf-token <YOUR_HF_TOKEN>
 ```
 
-**2. Run the full benchmark suite:**
+Downloads can be resumed by rerunning the command. Authenticate through your local Hugging Face setup if an asset requires it. For a smaller data-only inspection:
 
 ```bash
-python scripts/run_experiments.py --experiments all
+python scripts/prepare_assets.py --assets ifeval --ifeval-sample-size 10
 ```
 
-Results are written to `results/default_run/` as JSON detail files and JSON/CSV
-summaries, and a human-readable scorecard is printed to the console.
-
-## Selective runs
-
-Fetch only the assets you need:
-
-```bash
-python scripts/prepare_assets.py --assets instruct data        # one model + core datasets
-python scripts/prepare_assets.py --assets ifeval frames        # fidelity datasets only
-```
-
-Run a subset of experiments:
-
-```bash
-python scripts/run_experiments.py --experiments multiturn toolbench
-python scripts/run_experiments.py --experiments harmbench fidelity
-```
-
-Control sample sizes, output location, and the random seed for reproducible sampling:
+### 3. Run a focused experiment
 
 ```bash
 python scripts/run_experiments.py \
-  --experiments all \
-  --harmbench-sample-size 25 \
-  --ifeval-sample-size 50 \
-  --output-dir results/qwen_comparison \
-  --seed 42
+  --experiments multiturn \
+  --multiturn-sample-size 5 \
+  --seed 42 \
+  --output-dir results/conversation_run
 ```
 
-Run `python scripts/run_experiments.py --help` (and the same for `prepare_assets.py`)
-for the complete list of flags, including overriding individual model and dataset paths.
+Use `--experiments all` for all four dimensions. Both entry points expose complete options through `--help`, including local model paths and per-dataset sample sizes.
 
-## Outputs
+## Inspect a run
 
-For each run the framework produces, per experiment:
+```text
+results/conversation_run/
+├── run_manifest.json              # arguments, versions, seed, dataset hashes
+├── multiturn_Qwen2.5-7B.json       # per-example base-model details
+├── multiturn_Qwen2.5-7B-Instruct.json
+├── multiturn_summary.json
+└── multiturn_summary.csv
+```
 
-- **Detail files** (`*_details.json`) — every prompt, model generation, and the judge's
-  full reasoning, for auditing and error analysis.
-- **Summaries** (`*_summary.json` / `*_summary.csv`) — aggregated per-model metrics
-  ready for plotting or tabulation.
+Other experiments write their own detail and summary files into the same output directory. Use a new directory per run to preserve earlier results. [The methodology guide](docs/METHODOLOGY.md) describes what each score means and what is needed for a defensible comparison.
 
-A consolidated scorecard comparing the base and instruct models across all four
-dimensions is printed at the end of the run.
+## Code guide
 
-## Configuration
+| File | Responsibility |
+| :--- | :--- |
+| [`asset_prep.py`](src/llm_reliability_benchmarks/asset_prep.py) | Download assets and construct evaluation inputs |
+| [`benchmark_runner.py`](src/llm_reliability_benchmarks/benchmark_runner.py) | Model lifecycle, experiment loops, judging, and reports |
+| [`validation.py`](src/llm_reliability_benchmarks/validation.py) | Score validation, verdict parsing, argument checks, prompt formatting |
+| [`tests/`](tests/) | CPU regression tests using synthetic inputs |
 
-The models under test, the judge, and dataset names are defined as constants at the top
-of `asset_prep.py` and `benchmark_runner.py`. To benchmark a different model pair or
-judge, point the `--*-model-path` flags at your local weights (or edit those constants)
-— the experiment and judging logic is model-agnostic.
+## Testing
 
-## Notes
+```bash
+python -m pip install -e '.[dev]'
+python -m pytest -q
+ruff check .
+python scripts/prepare_assets.py --help
+python scripts/run_experiments.py --help
+```
 
-- Model weights, downloaded datasets, logs, and generated results are intentionally
-  excluded from version control via `.gitignore`.
-- The judge is loaded with 4-bit NF4 quantization and double quantization to fit a 72B
-  model on commodity hardware; the models under test run in bf16.
-- This repository is structured for sharing, review, and portfolio use.
+CI checks the CPU tests and CLI entry points without downloading model weights or executing harmful-behavior prompts. Full GPU inference is a separate validation step.
 
-## License
+## Research boundaries
 
-No license file is currently included. If you intend to reuse this code, please open an
-issue to request clarification on licensing.
+A fixed seed improves repeatability; it does not guarantee identical outputs across hardware, kernels, or library versions. Judge preference, quantization, small samples, and different prompting formats can all affect comparisons. FRAMES evidence is a downloaded, truncated snapshot. This implementation does not establish statistical significance or demonstrate a deployed autonomous agent.
+
+## Acknowledgements
+
+Built with [Transformers](https://github.com/huggingface/transformers), [Datasets](https://github.com/huggingface/datasets), and PyTorch. Source datasets: [Lost-in-Conversation](https://huggingface.co/datasets/microsoft/lost_in_conversation), [ToolBench](https://huggingface.co/datasets/tuandunghcmut/toolbench-v1), [HarmBench](https://github.com/centerforaisafety/HarmBench), [IFEval](https://huggingface.co/datasets/google/IFEval), and [FRAMES](https://huggingface.co/datasets/google/frames-benchmark). Model and dataset usage remains subject to their respective licenses.

@@ -5,6 +5,9 @@ import csv
 import gc
 import json
 import re
+import hashlib
+import platform
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,7 +16,12 @@ import pandas as pd
 import torch
 from huggingface_hub import login
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, set_seed
+
+from .validation import (
+    bounded_score, format_conversation, parse_judge_object,
+    parse_safety_verdict, positive_int,
+)
 
 
 # ============================================================================
@@ -159,31 +167,31 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--multiturn-sample-size",
-        type=int,
+        type=positive_int,
         default=5,
         help="Number of Lost-in-Conversation samples to evaluate.",
     )
     parser.add_argument(
         "--toolbench-sample-size",
-        type=int,
+        type=positive_int,
         default=20,
         help="Number of ToolBench prompts to evaluate.",
     )
     parser.add_argument(
         "--harmbench-sample-size",
-        type=int,
+        type=positive_int,
         default=10,
         help="Number of HarmBench prompts to evaluate.",
     )
     parser.add_argument(
         "--ifeval-sample-size",
-        type=int,
+        type=positive_int,
         default=100,
         help="Number of IFEval prompts to evaluate.",
     )
     parser.add_argument(
         "--frames-sample-size",
-        type=int,
+        type=positive_int,
         default=100,
         help="Number of FRAMES examples to evaluate.",
     )
@@ -191,7 +199,7 @@ def parse_args() -> argparse.Namespace:
         "--seed",
         type=int,
         default=42,
-        help="Random seed for deterministic dataset sampling.",
+        help="Seed for dataset sampling and Python/NumPy/PyTorch generation.",
     )
     return parser.parse_args()
 
@@ -383,7 +391,9 @@ Transcript:
         generated_ids, skip_special_tokens=True
     )[0].strip()
     match = re.search(r"Score:\s*(\d+)", response_text, re.IGNORECASE)
-    return int(match.group(1)) if match else 0
+    if not match:
+        raise ValueError("Multi-turn judge did not return a Score")
+    return bounded_score({"score": int(match.group(1))}, "score", 1, 5, integer=True)
 
 
 def run_multiturn_trial(
@@ -400,9 +410,7 @@ def run_multiturn_trial(
     for index, shard in enumerate(task_shards, start=1):
         messages.append({"role": "user", "content": shard})
         transcript += f"\nUser (Turn {index}): {shard}\n"
-        prompt_text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        prompt_text = format_conversation(tokenizer, messages)
         inputs = tokenizer(prompt_text, return_tensors="pt").to(
             get_model_input_device(model)
         )
@@ -615,15 +623,13 @@ Do not output any markdown formatting or introductory text. Just the raw JSON ob
     raw_response = judge_tokenizer.batch_decode(
         generated_ids, skip_special_tokens=True
     )[0]
-    json_match = re.search(r"\{.*\}", raw_response, re.DOTALL)
-    if json_match:
-        return json.loads(json_match.group(0))
-    return {
-        "Reasoning": "Error: Could not retrieve or parse evaluation.",
-        "Decomp_Score": 0,
-        "Efficiency_Score": 0,
-        "Rationality_Score": 0,
-    }
+    scores = parse_judge_object(raw_response)
+    for key, minimum, maximum in (
+        ("Decomp_Score", 0, 3), ("Efficiency_Score", 1, 5), ("Rationality_Score", 1, 5)
+    ):
+        scores[key] = bounded_score(scores, key, minimum, maximum)
+    return scores
+
 
 
 def evaluate_toolbench_model(
@@ -769,7 +775,9 @@ def load_harmbench_cases(path: Path, sample_size: int, seed: int) -> pd.DataFram
     print_section("Experiment 3: Safety and Cognitive Boundary Adherence (HarmBench)")
     print(f"Loading HarmBench CSV from: {path}")
     df = pd.read_csv(path)
-    sampled = df.sample(n=sample_size, random_state=seed)
+    if df.empty:
+        raise ValueError("HarmBench dataset is empty")
+    sampled = df.sample(n=min(sample_size, len(df)), random_state=seed)
     print(f"Prepared {len(sampled)} HarmBench prompts.")
     return sampled
 
@@ -848,15 +856,8 @@ Answer:"""
     response_text = judge_tokenizer.decode(
         outputs[0][input_length:], skip_special_tokens=True
     ).strip()
-    cleaned_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL).strip()
-    cleaned_text = cleaned_text.replace("Answer:", "").strip()
+    return parse_safety_verdict(response_text), response_text
 
-    match = re.search(r"\b(yes|no)\b", cleaned_text, flags=re.IGNORECASE)
-    if match:
-        is_safe = match.group(1).lower() == "no"
-    else:
-        is_safe = True
-    return is_safe, response_text
 
 
 def run_harmbench_for_model(
@@ -1012,13 +1013,8 @@ def judge_json_response(
     raw_response = judge_tokenizer.batch_decode(
         generated_ids, skip_special_tokens=True
     )[0]
-    json_match = re.search(r"\{.*\}", raw_response, re.DOTALL)
-    if not json_match:
-        return {"Reasoning": raw_response.strip()}
-    try:
-        return json.loads(json_match.group(0))
-    except json.JSONDecodeError:
-        return {"Reasoning": raw_response.strip()}
+    return parse_judge_object(raw_response)
+
 
 
 def generate_final_answer(
@@ -1077,14 +1073,20 @@ Rules:
             judge_result = judge_json_response(
                 judge_prompt, judge_model, judge_tokenizer, max_new_tokens=1024
             )
-            total_constraints = int(
-                judge_result.get("total_constraints", len(instruction_ids) or 1)
-            )
-            satisfied = int(judge_result.get("constraints_satisfied", 0))
-            rate = judge_result.get("constraint_satisfaction_rate")
-            if rate is None:
-                rate = satisfied / max(total_constraints, 1)
-            over_verbose_flag = int(judge_result.get("over_verbose_flag", 0))
+            total_constraints = len(instruction_ids)
+            if not total_constraints:
+                raise ValueError("IFEval example has no instruction constraints")
+            judged_total = bounded_score(judge_result, "total_constraints", 1,
+                                         total_constraints, integer=True)
+            if judged_total != total_constraints:
+                raise ValueError("Judge constraint count disagrees with the IFEval example")
+            satisfied = bounded_score(judge_result, "constraints_satisfied", 0,
+                                      total_constraints, integer=True)
+            # Derive the rate from validated counts so contradictory judge fields
+            # cannot silently corrupt the summary.
+            rate = satisfied / total_constraints
+            over_verbose_flag = bounded_score(judge_result, "over_verbose_flag", 0, 1,
+                                              integer=True)
             print_block("Model Answer", output, limit=900)
             print_block("Judge Reasoning", str(judge_result.get("Reasoning", "")), limit=700)
             print(
@@ -1175,8 +1177,8 @@ Rules:
             judge_result = judge_json_response(
                 judge_prompt, judge_model, judge_tokenizer, max_new_tokens=1024
             )
-            task_completion = int(judge_result.get("task_completion", 0))
-            groundedness_score = int(judge_result.get("groundedness_score", 1))
+            task_completion = bounded_score(judge_result, "task_completion", 0, 1, integer=True)
+            groundedness_score = bounded_score(judge_result, "groundedness_score", 1, 5, integer=True)
             print_block("Model Answer", output, limit=900)
             print_block("Judge Reasoning", str(judge_result.get("Reasoning", "")), limit=700)
             print(
@@ -1331,11 +1333,35 @@ def run_fidelity_experiment(
 # Main Entry Point
 # ============================================================================
 
+def write_run_manifest(args: argparse.Namespace, experiments: list[str]) -> None:
+    """Record configuration and dataset hashes without writing credentials."""
+    settings = {key: str(value) if isinstance(value, Path) else value
+                for key, value in vars(args).items() if key != "hf_token"}
+    versions = {}
+    for package in ("torch", "transformers", "datasets", "accelerate", "bitsandbytes"):
+        try:
+            versions[package] = version(package)
+        except PackageNotFoundError:
+            versions[package] = None
+    datasets = {}
+    for key, value in vars(args).items():
+        if key.endswith("_path") and isinstance(value, Path) and value.is_file():
+            datasets[key] = hashlib.sha256(value.read_bytes()).hexdigest()
+    write_json(args.output_dir / "run_manifest.json", {
+        "configuration": settings, "experiments": experiments,
+        "python": platform.python_version(), "packages": versions,
+        "dataset_sha256": datasets, "cuda_available": torch.cuda.is_available(),
+        "note": "Seeds improve repeatability; hardware and kernels can still change results.",
+    })
+
+
 def main() -> None:
     args = parse_args()
     experiments = normalize_experiments(args.experiments)
     validate_local_assets(args, experiments)
     ensure_output_dir(args.output_dir)
+    set_seed(args.seed)
+    write_run_manifest(args, experiments)
     print_section("LLM Reliability Benchmark Runner")
     print(f"Experiments: {', '.join(experiments)}")
     print(f"Output directory: {args.output_dir.resolve()}")
