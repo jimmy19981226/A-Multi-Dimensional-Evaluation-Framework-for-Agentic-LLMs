@@ -11,7 +11,7 @@ A local evaluation framework comparing base and instruction-tuned language model
 ![Inference](https://img.shields.io/badge/Inference-local-4169E1)
 ![Status](https://img.shields.io/badge/Status-research%20implementation-8759C7)
 
-[Reported results](#reported-results) · [Evaluation design](#evaluation-design) · [Get started](#get-started) · [Methodology](docs/METHODOLOGY.md) · [Tests](#testing)
+[Review guide](#review-guide) · [Reported results](#reported-results) · [Evaluation design](#evaluation-design) · [Get started](#get-started) · [Methodology](docs/METHODOLOGY.md) · [Tests](#testing)
 
 </div>
 
@@ -22,6 +22,14 @@ Aggregate scores can hide different failure modes. This project evaluates a mode
 The default comparison is **Qwen2.5-7B vs. Qwen2.5-7B-Instruct**, with **Qwen2.5-72B-Instruct** as a local judge. It combines Hugging Face asset preparation, GPU inference, structured grading, and JSON/CSV reporting in one workflow.
 
 **Project status:** Research implementation with CPU regression tests and presentation-reported study results. Independent reproduction of the reported scores is pending. The grading protocols are custom adaptations of the source datasets; see [methodology and limitations](docs/METHODOLOGY.md) before interpreting scores.
+
+## Review guide
+
+- **Evaluate the research claim:** inspect [reported results and the rubric discrepancy](docs/RESULTS.md), then the [evaluation methodology](docs/METHODOLOGY.md).
+- **Inspect reliability controls:** [validation.py](src/llm_reliability_benchmarks/validation.py) validates judge responses before they become scores.
+- **Trace a result:** [reporting tests](tests/test_reporting.py) exercise aggregation and serialization with synthetic outputs. One test supplies a judge-reported constraint rate of `0.99` alongside `1 / 2` satisfied constraints; the evaluator records the derived rate `0.5`.
+
+For a laptop review, use the [CPU setup](#1-install) and [tests](#testing). Running the default models is optional and requires a substantially larger GPU environment.
 
 ## Reported results
 
@@ -77,10 +85,17 @@ git clone https://github.com/jimmy19981226/A-Multi-Dimensional-Evaluation-Framew
 cd A-Multi-Dimensional-Evaluation-Framework-for-Agentic-LLMs
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[gpu,dev]'
+python -m pip install -e '.[dev]'
+python -m pytest -q
 ```
 
-Install the PyTorch build appropriate for your CUDA environment using the [official installer](https://pytorch.org/get-started/locally/). On Windows, activate with `.venv\Scripts\Activate.ps1`.
+The commands above run synthetic CPU checks without downloading model weights or datasets. On Windows, activate with `.venv\Scripts\Activate.ps1`.
+
+For full inference, install the PyTorch build appropriate for your CUDA environment using the [official installer](https://pytorch.org/get-started/locally/), then add GPU dependencies:
+
+```bash
+python -m pip install -e '.[gpu,dev]'
+```
 
 ### 2. Prepare assets
 
